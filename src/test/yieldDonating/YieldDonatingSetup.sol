@@ -46,10 +46,7 @@ contract YieldDonatingSetup is Test, IEvents {
     function setUp() public virtual {
         // Read asset address from environment
         address testAssetAddress = vm.envAddress("TEST_ASSET_ADDRESS");
-        require(
-            testAssetAddress != address(0),
-            "TEST_ASSET_ADDRESS not set in .env"
-        );
+        require(testAssetAddress != address(0), "TEST_ASSET_ADDRESS not set in .env");
 
         // Set asset
         asset = ERC20(testAssetAddress);
@@ -65,16 +62,9 @@ contract YieldDonatingSetup is Test, IEvents {
         require(yieldSource != address(0), "TEST_YIELD_SOURCE not set in .env");
 
         // Deploy YieldDonatingTokenizedStrategy implementation
-        tokenizedStrategyAddress = address(
-            new YieldDonatingTokenizedStrategy()
-        );
+        tokenizedStrategyAddress = address(new YieldDonatingTokenizedStrategy());
 
-        strategyFactory = new StrategyFactory(
-            management,
-            dragonRouter,
-            keeper,
-            emergencyAdmin
-        );
+        strategyFactory = new StrategyFactory(management, dragonRouter, keeper, emergencyAdmin);
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
@@ -114,11 +104,7 @@ contract YieldDonatingSetup is Test, IEvents {
         return address(_strategy);
     }
 
-    function depositIntoStrategy(
-        IStrategyInterface _strategy,
-        address _user,
-        uint256 _amount
-    ) public {
+    function depositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
         vm.prank(_user);
         asset.approve(address(_strategy), _amount);
 
@@ -126,11 +112,7 @@ contract YieldDonatingSetup is Test, IEvents {
         _strategy.deposit(_amount, _user);
     }
 
-    function mintAndDepositIntoStrategy(
-        IStrategyInterface _strategy,
-        address _user,
-        uint256 _amount
-    ) public {
+    function mintAndDepositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
         airdrop(asset, _user, _amount);
         depositIntoStrategy(_strategy, _user, _amount);
     }
@@ -143,9 +125,7 @@ contract YieldDonatingSetup is Test, IEvents {
         uint256 _totalIdle
     ) public {
         uint256 _assets = _strategy.totalAssets();
-        uint256 _balance = ERC20(_strategy.asset()).balanceOf(
-            address(_strategy)
-        );
+        uint256 _balance = ERC20(_strategy.asset()).balanceOf(address(_strategy));
         uint256 _idle = _balance > _assets ? _assets : _balance;
         uint256 _debt = _assets - _idle;
         assertEq(_assets, _totalAssets, "!totalAssets");
@@ -173,9 +153,7 @@ contract YieldDonatingSetup is Test, IEvents {
     function setEnableBurning(bool _enableBurning) public {
         vm.prank(management);
         // Call using low-level call since setEnableBurning may not be in all interfaces
-        (bool success, ) = address(strategy).call(
-            abi.encodeWithSignature("setEnableBurning(bool)", _enableBurning)
-        );
+        (bool success, ) = address(strategy).call(abi.encodeWithSignature("setEnableBurning(bool)", _enableBurning));
         require(success, "setEnableBurning failed");
     }
 }

@@ -142,11 +142,7 @@ contract YieldDonatingStrategy is BaseStrategy {
      * @return _totalAssets A trusted and accurate account for the total
      * amount of 'asset' the strategy currently holds including idle funds.
      */
-    function _harvestAndReport()
-        internal
-        override
-        returns (uint256 _totalAssets)
-    {
+    function _harvestAndReport() internal override returns (uint256 _totalAssets) {
         // TODO: Implement harvesting logic
         // 1. Amount of assets claimable from the yield source
         // 2. Amount of assets idle in the strategy
@@ -162,9 +158,7 @@ contract YieldDonatingStrategy is BaseStrategy {
      * @dev Can be overridden to implement withdrawal limits.
      * @return . The available amount that can be withdrawn.
      */
-    function availableWithdrawLimit(
-        address /*_owner*/
-    ) public view virtual override returns (uint256) {
+    function availableWithdrawLimit(address /*_owner*/) public view virtual override returns (uint256) {
         return type(uint256).max;
     }
 
@@ -174,9 +168,7 @@ contract YieldDonatingStrategy is BaseStrategy {
      * @param . The address that will deposit.
      * @return . The available amount that can be deposited.
      */
-    function availableDepositLimit(
-        address /*_owner*/
-    ) public view virtual override returns (uint256) {
+    function availableDepositLimit(address /*_owner*/) public view virtual override returns (uint256) {
         return type(uint256).max;
     }
 

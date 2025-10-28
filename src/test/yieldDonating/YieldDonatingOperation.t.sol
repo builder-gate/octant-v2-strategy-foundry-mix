@@ -14,15 +14,10 @@ contract YieldDonatingOperationTest is Setup {
         assertTrue(address(0) != address(strategy));
         assertEq(strategy.asset(), address(asset));
         assertEq(strategy.management(), management);
-        assertEq(
-            ITokenizedStrategy(address(strategy)).dragonRouter(),
-            dragonRouter
-        );
+        assertEq(ITokenizedStrategy(address(strategy)).dragonRouter(), dragonRouter);
         assertEq(strategy.keeper(), keeper);
         // Check enableBurning using low-level call since it's not in the interface
-        (bool success, bytes memory data) = address(strategy).staticcall(
-            abi.encodeWithSignature("enableBurning()")
-        );
+        (bool success, bytes memory data) = address(strategy).staticcall(abi.encodeWithSignature("enableBurning()"));
         require(success, "enableBurning call failed");
         bool currentEnableBurning = abi.decode(data, (bool));
         assertEq(currentEnableBurning, enableBurning);
@@ -54,14 +49,8 @@ contract YieldDonatingOperationTest is Setup {
         assertGt(dragonRouterShares, 0, "!dragon router shares");
 
         // Convert shares back to assets to verify
-        uint256 dragonRouterAssets = strategy.convertToAssets(
-            dragonRouterShares
-        );
-        assertEq(
-            dragonRouterAssets,
-            profit,
-            "!dragon router assets should equal profit"
-        );
+        uint256 dragonRouterAssets = strategy.convertToAssets(dragonRouterShares);
+        assertEq(dragonRouterAssets, profit, "!dragon router assets should equal profit");
 
         uint256 balanceBefore = asset.balanceOf(user);
 
@@ -69,19 +58,11 @@ contract YieldDonatingOperationTest is Setup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
 
         // Assert that dragon router still has shares (the yield portion)
         uint256 dragonRouterSharesAfter = strategy.balanceOf(dragonRouter);
-        assertGt(
-            dragonRouterSharesAfter,
-            0,
-            "!dragon router shares after withdrawal"
-        );
+        assertGt(dragonRouterSharesAfter, 0, "!dragon router shares after withdrawal");
     }
 
     function test_tendTrigger(uint256 _amount) public {

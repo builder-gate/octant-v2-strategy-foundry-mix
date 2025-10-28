@@ -47,11 +47,7 @@ contract YieldDonatingFunctionSignatureTest is Setup {
         assertGt(strategy.lastReport(), 0, "last report");
         assertEq(strategy.pricePerShare(), 10 ** asset.decimals(), "pps");
         assertTrue(!strategy.isShutdown());
-        assertEq(
-            strategy.symbol(),
-            string(abi.encodePacked("os", asset.symbol())),
-            "symbol"
-        );
+        assertEq(strategy.symbol(), string(abi.encodePacked("os", asset.symbol())), "symbol");
         assertEq(strategy.decimals(), asset.decimals(), "decimals");
 
         // Assure modifiers are working

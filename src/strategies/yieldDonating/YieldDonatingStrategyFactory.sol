@@ -19,12 +19,7 @@ contract YieldDonatingStrategyFactory {
     /// @notice Track the deployments. asset => strategy
     mapping(address => address) public deployments;
 
-    constructor(
-        address _management,
-        address _donationAddress,
-        address _keeper,
-        address _emergencyAdmin
-    ) {
+    constructor(address _management, address _donationAddress, address _keeper, address _emergencyAdmin) {
         management = _management;
         donationAddress = _donationAddress;
         keeper = _keeper;
@@ -69,11 +64,7 @@ contract YieldDonatingStrategyFactory {
         return address(_newStrategy);
     }
 
-    function setAddresses(
-        address _management,
-        address _donationAddress,
-        address _keeper
-    ) external {
+    function setAddresses(address _management, address _donationAddress, address _keeper) external {
         require(msg.sender == management, "!management");
         management = _management;
         donationAddress = _donationAddress;
@@ -85,9 +76,7 @@ contract YieldDonatingStrategyFactory {
         enableBurning = _enableBurning;
     }
 
-    function isDeployedStrategy(
-        address _strategy
-    ) external view returns (bool) {
+    function isDeployedStrategy(address _strategy) external view returns (bool) {
         address _asset = IStrategyInterface(_strategy).asset();
         return deployments[_asset] == _strategy;
     }

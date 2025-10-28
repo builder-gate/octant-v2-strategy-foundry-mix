@@ -20,3 +20,6 @@ yarn.lock
 .DS_Store
 
 lib/
+
+# Yarn PnP files
+.yarn/*
