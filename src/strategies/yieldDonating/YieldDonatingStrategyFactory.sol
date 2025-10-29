@@ -3,7 +3,7 @@ pragma solidity ^0.8.25;
 
 import {YieldDonatingStrategy} from "./YieldDonatingStrategy.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
-import {TokenizedStrategy} from "@octant-core/dragons/vaults/TokenizedStrategy.sol";
+import {YieldDonatingTokenizedStrategy} from "@octant-core/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
 
 contract YieldDonatingStrategyFactory {
     event NewStrategy(address indexed strategy, address indexed asset);
@@ -19,19 +19,14 @@ contract YieldDonatingStrategyFactory {
     /// @notice Track the deployments. asset => strategy
     mapping(address => address) public deployments;
 
-    constructor(
-        address _management,
-        address _donationAddress,
-        address _keeper,
-        address _emergencyAdmin
-    ) {
+    constructor(address _management, address _donationAddress, address _keeper, address _emergencyAdmin) {
         management = _management;
         donationAddress = _donationAddress;
         keeper = _keeper;
         emergencyAdmin = _emergencyAdmin;
 
         // Deploy the standard TokenizedStrategy implementation
-        tokenizedStrategyAddress = address(new TokenizedStrategy());
+        tokenizedStrategyAddress = address(new YieldDonatingTokenizedStrategy());
     }
 
     /**
@@ -69,11 +64,7 @@ contract YieldDonatingStrategyFactory {
         return address(_newStrategy);
     }
 
-    function setAddresses(
-        address _management,
-        address _donationAddress,
-        address _keeper
-    ) external {
+    function setAddresses(address _management, address _donationAddress, address _keeper) external {
         require(msg.sender == management, "!management");
         management = _management;
         donationAddress = _donationAddress;
@@ -85,9 +76,7 @@ contract YieldDonatingStrategyFactory {
         enableBurning = _enableBurning;
     }
 
-    function isDeployedStrategy(
-        address _strategy
-    ) external view returns (bool) {
+    function isDeployedStrategy(address _strategy) external view returns (bool) {
         address _asset = IStrategyInterface(_strategy).asset();
         return deployments[_asset] == _strategy;
     }

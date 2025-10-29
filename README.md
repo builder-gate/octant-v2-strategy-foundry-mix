@@ -1,333 +1,244 @@
-# Strategy Templates for Octant
+# YieldDonating Strategy Development Guide for Octant
 
-This repository provides templates for creating strategies compatible with Octant's ecosystem using [Foundry](https://book.getfoundry.sh/). It supports both **YieldDonating** and **YieldSkimming** strategy patterns adapted for Octant's public goods funding model.
+This repository provides a template for creating **YieldDonating strategies** compatible with Octant's ecosystem using [Foundry](https://book.getfoundry.sh/). YieldDonating strategies donate all generated yield to a donation address.
 
-## Strategy Types
+## What is a YieldDonating Strategy?
 
-### YieldDonating Strategies (`src/strategies/yieldDonating/`)
-- **Purpose**: Donate yield generated from productive assets to public goods funding
-- **Profit Distribution**: Profits are minted as shares to a designated `dragonRouter` address instead of charging performance fees
-- **Loss Protection**: When enabled, the strategy can burn shares from the dragonRouter to cover losses and protect users
-- **Use Case**: Traditional yield strategies (Aave, Compound, Yearn vaults) that donate their yield to Octant
-
-### YieldSkimming Strategies (`src/strategies/yieldSkimming/`)
-
-- **Purpose**: Capture yield from appreciating assets through exchange rate tracking and donate the profits to public goods funding
-- **Profit Distribution**: Profits are minted as shares to a designated `dragonRouter` address instead of charging performance fees
-- **Loss Protection**: When enabled, the strategy can burn shares from the dragonRouter to cover losses and protect users
-- **Yield Mechanism**: Works with yield-bearing assets (wstETH, rETH) that appreciate in value over time
-- **Exchange Rate Tracking**: Monitors exchange rate changes to detect and capture yield appreciation
-- **Use Case**: Liquid staking tokens, rebasing tokens, or any asset where yield comes from price appreciation rather than separate rewards
-
-## Key Differences from Standard Yearn Strategies
-
-This repository is adapted from Yearn V3 tokenized strategies for Octant's ecosystem:
-
-- ❌ **No Performance Fees**: Strategies don't charge performance fees to users
-- ✅ **Profit Donation**: All profits are donated to Octant's dragonRouter for public goods funding
-- ✅ **Loss Protection**: Optional burning of dragon shares to protect users from losses
-- ✅ **Two Strategy Patterns**: Support for both traditional yield harvesting and yield-bearing asset appreciation
-
-## Repository Structure
-
-```
-src/
-├── strategies/
-│   ├── yieldDonating/
-│   │   ├── YieldDonatingStrategy.sol       # Template for yield harvesting strategies
-│   │   └── YieldDonatingStrategyFactory.sol
-│   └── yieldSkimming/
-│       ├── YieldSkimmingStrategy.sol        # Template for yield-bearing asset strategies
-│       └── YieldSkimmingStrategyFactory.sol
-├── interfaces/
-│   └── IStrategyInterface.sol
-└── test/
-    ├── yieldDonating/                       # Tests for YieldDonating pattern
-    │   ├── YieldDonatingSetup.sol           # Base setup for YieldDonating tests
-    │   ├── YieldDonatingOperation.t.sol     # Main operation tests
-    │   ├── YieldDonatingFunctionSignature.t.sol # Function signature collision tests
-    │   └── YieldDonatingShutdown.t.sol      # Shutdown and emergency tests
-    ├── yieldSkimming/                       # Tests for YieldSkimming pattern
-    │   ├── YieldSkimmingSetup.sol           # Base setup for YieldSkimming tests
-    │   ├── YieldSkimmingOperation.t.sol     # Main operation tests
-    │   ├── YieldSkimmingFunctionSignature.t.sol # Function signature collision tests
-    │   └── YieldSkimmingShutdown.t.sol      # Shutdown and emergency tests
-    └── utils/                               # Shared testing utilities
-```
+YieldDonating strategies are designed to:
+- Deploy assets into external yield sources (Aave, Compound, Yearn vaults, etc.)
+- Harvest yield and donate 100% of profits to public goods funding
+- Optionally protect users from losses by burning dragonRouter shares
+- Charge NO performance fees to users
 
 ## Getting Started
 
-For YieldDonating, strategy types, you need to override three core functions:
-- `_deployFunds`: Deploy assets into yield-generating positions
-- `_freeFunds`: Withdraw assets from positions  
-- `_harvestAndReport`: Harvest rewards and report total assets
+### Prerequisites
 
-For YieldSkimming, strategy types, you need to override two core functions:
-- `getCurrentExchangeRate`: Get the current exchange rate of the yield-bearing asset
-- `decimalsOfExchangeRate`: Get the decimals of the exchange rate
-
-Optional overrides include `_tend`, `_tendTrigger`, `availableDepositLimit`, `availableWithdrawLimit` and `_emergencyWithdraw`.
-
-## How to start
-
-### Requirements
-
-- First you will need to install [Foundry](https://book.getfoundry.sh/getting-started/installation).
-NOTE: If you are on a windows machine it is recommended to use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
-- Install [Node.js](https://nodejs.org/en/download/package-manager/)
-
-### Clone this repository
-
+1. Install [Foundry](https://book.getfoundry.sh/getting-started/installation) (WSL recommended for Windows)
+2. Install [Node.js](https://nodejs.org/en/download/package-manager/)
+3. Clone this repository:
 ```sh
 git clone --recursive https://github.com/golemfoundation/octant-v2-tokenized-strategy-foundry-mix
-
 cd octant-v2-tokenized-strategy-foundry-mix
-
 yarn
 ```
 
-### Set your environment Variables
+### Environment Setup
 
-Use the `.env.example` template to create a `.env` file and store the environment variables. You will need to populate the `RPC_URL` for the desired network(s). RPC url can be obtained from various providers, including [Ankr](https://www.ankr.com/rpc/) (no sign-up required) and [Infura](https://infura.io/).
+1. Copy `.env.example` to `.env`
+2. Set the required environment variables:
+```env
+# Required for testing
+TEST_ASSET_ADDRESS=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48  # USDC on mainnet
+TEST_YIELD_SOURCE=0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2   # Your yield source address
 
-Use .env file
-
-1. Make a copy of `.env.example`
-2. Add the value for `ETH_RPC_URL` and other example vars
-     NOTE: If you set up a global environment variable, that will take precedence.
-
-### Build the project
-
-```sh
-make build
+# RPC URLs
+ETH_RPC_URL=https://mainnet.infura.io/v3/YOUR_INFURA_API_KEY  # Get your key from infura.io
 ```
 
-Run tests
+## Strategy Development Step-by-Step
 
-```sh
-make test
+### 1. Understanding the Template Structure
+
+The YieldDonating strategy template (`src/strategies/yieldDonating/YieldDonatingStrategy.sol`) contains:
+- **Constructor parameters** you need to provide
+- **Mandatory functions** (marked with TODO) you MUST implement
+- **Optional functions** you can override if needed
+- **Built-in functionality** for profit donation and loss protection
+
+### 2. Define Your Yield Source Interface
+
+First, implement the `IYieldSource` interface for your specific protocol:
+
+```solidity
+// TODO: Replace with your yield source interface
+interface IYieldSource {
+    // Example for Aave V3:
+    function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external;
+    function withdraw(address asset, uint256 amount, address to) external returns (uint256);
+    
+    // Example for ERC4626 vaults:
+    function deposit(uint256 assets, address receiver) external returns (uint256);
+    function redeem(uint256 shares, address receiver, address owner) external returns (uint256);
+    function convertToAssets(uint256 shares) external view returns (uint256);
+}
 ```
 
-## Strategy Implementation Guide
+### 3. Implement Mandatory Functions
 
-### YieldDonating Pattern
+You MUST implement these three core functions:
 
-For strategies that harvest external rewards and donate them to public goods funding.
-
-**Example Use Cases:**
-- Aave lending strategies
-- Compound lending strategies
-- Yearn vault strategies
-- Any strategy that earns separate reward tokens
-
-**Key Implementation Points:**
+#### A. `_deployFunds(uint256 _amount)`
+Deploy assets into your yield source:
 ```solidity
 function _deployFunds(uint256 _amount) internal override {
-    // Deploy assets into yield source
-    // Example: aavePool.supply(address(asset), _amount, address(this), 0);
+    // Example for Aave:
+    yieldSource.supply(address(asset), _amount, address(this), 0);
+    
+    // Example for ERC4626:
+    // IERC4626(address(yieldSource)).deposit(_amount, address(this));
 }
+```
 
+#### B. `_freeFunds(uint256 _amount)`
+Withdraw assets from your yield source:
+```solidity
 function _freeFunds(uint256 _amount) internal override {
-    // Withdraw assets from yield source
-    // Example: aavePool.withdraw(address(asset), _amount, address(this));
-}
-
-function _harvestAndReport() internal override returns (uint256 _totalAssets) {
-    // 1. Claim rewards from yield source
-    // 2. Sell rewards for base asset (optional)
-    // 3. Return accurate total assets including loose balance
-    // 4. Profits will automatically be minted to dragonRouter
+    // Example for Aave:
+    yieldSource.withdraw(address(asset), _amount, address(this));
+    
+    // Example for ERC4626:
+    // uint256 shares = IERC4626(address(yieldSource)).convertToShares(_amount);
+    // IERC4626(address(yieldSource)).redeem(shares, address(this), address(this));
 }
 ```
 
-### YieldSkimming Pattern  
-
-For strategies that work with yield-bearing assets that appreciate over time.
-
-**Example Use Cases:**
-- Lido wstETH (wstETH/ETH exchange rate appreciation)
-- Rocket Pool rETH (rETH/ETH exchange rate appreciation)  
-- ERC4626 vaults that appreciate in value
-- Rebasing tokens that increase in value
-
-**Key Implementation Points:**
+#### C. `_harvestAndReport()`
+Calculate total assets held by the strategy:
 ```solidity
-function getCurrentExchangeRate() public view returns (uint256) {
-    // Return current exchange rate of your yield-bearing asset
-    // Example for wstETH: return IWstETH(address(asset)).stEthPerToken();
-    // Example for rETH: return IRocketPool(address(asset)).getExchangeRate();
-    // Example for ERC4626: return IERC4626(address(asset)).convertToAssets(1e18);
-}
-
-function _deployFunds(uint256 _amount) internal override {
-    // Usually no deployment needed for yield-bearing assets
-    // Assets appreciate automatically through exchange rate
-}
-
 function _harvestAndReport() internal override returns (uint256 _totalAssets) {
-    // Track exchange rate changes to detect yield
-    // Return current asset balance - appreciation is captured automatically
+    // 1. Get assets deployed in yield source
+    uint256 deployedAssets = yieldSource.balanceOf(address(this));
+    
+    // 2. Get idle assets in strategy
+    uint256 idleAssets = asset.balanceOf(address(this));
+    
+    // 3. Return total (MUST include both deployed and idle)
+    _totalAssets = deployedAssets + idleAssets;
+    
+    // Note: Profit/loss is calculated automatically by comparing
+    // with previous totalAssets. Profits are minted to dragonRouter.
 }
 ```
 
-## Strategy Pattern Details
+### 4. Optional Functions
 
-### YieldDonating Pattern
+Override these functions based on your strategy's needs:
 
-Designed for strategies that:
-1. Deploy assets into external yield sources (Aave, Compound, etc.)
-2. Harvest external rewards or interest
-3. Donate all profits by minting shares to dragonRouter
-4. Optionally protect against losses by burning dragonRouter shares
+#### `availableDepositLimit(address _owner)`
+Implement deposit limits if needed:
+```solidity
+function availableDepositLimit(address) public view override returns (uint256) {
+    // Example: Cap at protocol's lending capacity
+    uint256 protocolCapacity = yieldSource.availableCapacity();
+    return protocolCapacity;
+}
+```
 
-**Key Features:**
-- No performance fees charged to users
-- All yield goes to public goods funding
-- Loss protection through dragon share burning
-- Compatible with any yield source that provides separate rewards
+#### `availableWithdrawLimit(address _owner)`
+Implement withdrawal limits:
+```solidity
+function availableWithdrawLimit(address) public view override returns (uint256) {
+    // Example: Limited by protocol's available liquidity
+    return yieldSource.availableLiquidity();
+}
+```
 
-### YieldSkimming Pattern
+#### `_emergencyWithdraw(uint256 _amount)`
+Emergency withdrawal logic when strategy is shutdown:
+```solidity
+function _emergencyWithdraw(uint256 _amount) internal override {
+    // Force withdraw from yield source
+    yieldSource.emergencyWithdraw(_amount);
+}
+```
 
-Designed for strategies that:
-1. Hold yield-bearing assets that appreciate in value
-2. Track exchange rate changes to capture yield appreciation
-3. Donate appreciation gains by minting shares to dragonRouter
-4. Require minimal maintenance (assets appreciate automatically)
+#### `_tend(uint256 _totalIdle)` and `_tendTrigger()`
+For maintenance between reports:
+```solidity
+function _tend(uint256 _totalIdle) internal override {
+    // Example: Deploy idle funds if above threshold
+    if (_totalIdle > minDeployAmount) {
+        _deployFunds(_totalIdle);
+    }
+}
 
-**Key Features:**
-- Works with liquid staking tokens and appreciating assets
-- Exchange rate tracking captures yield without external harvesting
-- Ideal for assets like wstETH, rETH, or yield-bearing vaults
-- Simplified implementation for self-appreciating assets
+function _tendTrigger() internal view override returns (bool) {
+    // Return true when tend should be called
+    return asset.balanceOf(address(this)) > minDeployAmount;
+}
+```
 
-## Testing
+### 5. Constructor Parameters
 
-### YieldDonating Strategy Tests
-- **Profit Distribution**: Verify profits are minted to dragonRouter
-- **Loss Protection**: Test dragon share burning during losses
-- **Harvest Functionality**: Test reward claiming and asset accounting
-- **Dragon Router Management**: Test address updates and cooldowns
+When deploying your strategy, provide these parameters:
+- `_yieldSource`: Address of your yield protocol (Aave, Compound, etc.)
+- `_asset`: The token to be managed (USDC, DAI, etc.)
+- `_name`: Your strategy name (e.g., "USDC Aave YieldDonating")
+- `_management`: Address that can configure the strategy
+- `_keeper`: Address that can call report() and tend()
+- `_emergencyAdmin`: Address that can shutdown the strategy
+- `_donationAddress`: The dragonRouter address (receives minted profit shares)
+- `_enableBurning`: Whether to enable loss protection via share burning
+- `_tokenizedStrategyAddress`: YieldDonatingTokenizedStrategy implementation
 
-### YieldSkimming Strategy Tests  
-- **Exchange Rate Tracking**: Verify rate changes are detected using `vm.mockCall`
-- **Yield Appreciation**: Test profit capture from asset appreciation through mocked exchange rates
-- **Asset Limits**: Test deposit/withdrawal limits
-- **Basic Functionality**: Test core strategy operations
+## Testing Your Strategy
 
-**Note**: YieldSkimming tests use `vm.mockCall` to simulate exchange rate changes rather than adding tokens, since yield comes from appreciation of the underlying asset value, not additional token rewards.
+### 1. Update Test Configuration
 
-**YieldSkimming Behavior**: When the exchange rate appreciates (e.g., wstETH becomes worth more ETH), users benefit from the appreciation on their holdings, while the yield portion (the appreciation amount) gets minted as new shares to the donation address. This allows users to participate in the asset's growth while donating the yield to public goods funding.
+Modify `src/test/yieldDonating/YieldDonatingSetup.sol`:
+- Set your yield source interface and mock
+- Adjust test parameters as needed
 
-Run tests:
+### 2. Run Tests
 
 ```sh
-# All tests
+# Run all YieldDonating tests
 make test
 
-# YieldDonating tests only
+# Run specific test file
 make test-contract contract=YieldDonatingOperation
-make test-contract contract=YieldDonatingFunctionSignature
-make test-contract contract=YieldDonatingShutdown
 
-# YieldSkimming tests only  
-make test-contract contract=YieldSkimmingOperation
-make test-contract contract=YieldSkimmingFunctionSignature
-make test-contract contract=YieldSkimmingShutdown
-
-# With traces for debugging
+# Run with traces for debugging
 make trace
 ```
 
-## Current Implementation Status
+### 3. Key Test Scenarios
+
+Your tests should verify:
+- ✅ Assets are correctly deployed to yield source
+- ✅ Withdrawals work for various amounts
+- ✅ Profits are minted to dragonRouter (not kept by strategy)
+- ✅ Losses trigger dragonRouter share burning (if enabled)
+- ✅ Emergency withdrawals work when shutdown
+- ✅ Deposit/withdraw limits are enforced
+
+## Common Implementation Examples
 
 
-## Dependencies
-
-This repository uses octant-v2-core from GitHub:
-```bash
-forge install golemfoundation/octant-v2-core
-```
-
-The strategies inherit from `BaseStrategy` available in octant-v2-core and use the TokenizedStrategy pattern for vault functionality.
-
-## Choosing the Right Strategy Type
-
-### Use YieldDonating When:
-- Your strategy earns separate reward tokens (COMP, AAVE, CRV, etc.)
-- You need to harvest and sell rewards
-- You're working with lending protocols or farms
-- You want traditional yield strategy behavior with donation mechanics
-
-### Use YieldSkimming When:
-- Your asset appreciates in value over time (wstETH, rETH)
-- Yield comes from exchange rate changes, not separate rewards
-- You want minimal maintenance overhead
-- You're working with liquid staking tokens or rebasing assets
-
-Both patterns donate all profits to Octant's public goods funding and provide loss protection mechanisms.
-
-## Example Implementations
-
-### YieldDonating: Morpho Compounder Strategy
+### ERC4626 Vault Strategy
 ```solidity
 function _deployFunds(uint256 _amount) internal override {
-    IERC4626(compounderVault).deposit(_amount, address(this));
+    IERC4626(address(yieldSource)).deposit(_amount, address(this));
 }
 
-function _harvestAndReport() internal view override returns (uint256 _totalAssets) {
-    // get strategy's balance in the vault
-    uint256 shares = IERC4626(compounderVault).balanceOf(address(this));
-    uint256 vaultAssets = IERC4626(compounderVault).convertToAssets(shares);
-
-    // include idle funds as per BaseStrategy specification
-    uint256 idleAssets = IERC20(asset).balanceOf(address(this));
-
+function _harvestAndReport() internal override returns (uint256 _totalAssets) {
+    uint256 shares = IERC4626(address(yieldSource)).balanceOf(address(this));
+    uint256 vaultAssets = IERC4626(address(yieldSource)).convertToAssets(shares);
+    uint256 idleAssets = asset.balanceOf(address(this));
+    
     _totalAssets = vaultAssets + idleAssets;
-
-    return _totalAssets;
 }
 ```
 
-### YieldSkimming: Lido wstETH Strategy  
-```solidity
-// Hold wstETH, track stETH/ETH rate appreciation
-function getCurrentExchangeRate() public view returns (uint256) {
-    return IWstETH(address(asset)).stEthPerToken();
-}
+## Deployment Checklist
 
-function _harvestAndReport() internal override returns (uint256) {
-    // No harvesting needed - wstETH appreciates automatically
-    return asset.balanceOf(address(this));
-}
-```
+- [ ] Implement all TODO functions in the strategy
+- [ ] Update IYieldSource interface for your protocol
+- [ ] Set up proper token approvals in constructor
+- [ ] Test all core functionality
+- [ ] Test profit donation to dragonRouter
+- [ ] Test loss protection if enabled
+- [ ] Verify emergency shutdown procedures
 
-## Contract Verification
 
-Once deployed and verified, strategies will need TokenizedStrategy function verification on Etherscan:
+## Key Differences from Standard Tokenized Strategies
 
-1. Navigate to the contract's /#code page on Etherscan
-2. Click "More Options" → "is this a proxy?"
-3. Click "Verify" → "Save"
+| Feature | Standard Strategy | YieldDonating Strategy |
+|---------|------------------|----------------------|
+| Performance Fees | Charges fees to LPs | NO fees - all yield donated |
+| Profit Distribution | Kept by strategy/fees | Minted as shares to dragonRouter |
+| Loss Protection | Users bear losses | Optional burning of dragon shares |
+| Use Case | Maximize LP returns | Public goods funding |
 
-This adds all TokenizedStrategy functions to the contract interface.
 
-## CI/CD
-
-This repo uses GitHub Actions for:
-- **Lint**: Code formatting and style checks
-- **Test**: Automated test execution
-- **Slither**: Static analysis for security issues
-- **Coverage**: Test coverage reporting
-
-Add `ETH_RPC_URL` secret to enable test workflows. See [GitHub Actions docs](https://docs.github.com/en/actions/security-guides/encrypted-secrets) for setup.
-
-## Contributing
-
-When implementing strategies:
-1. Choose the appropriate pattern (YieldDonating vs YieldSkimming)
-2. Implement the required override functions
-3. Add comprehensive tests
-4. Document exchange rate logic for YieldSkimming strategies
-5. Test profit donation and loss protection mechanisms
-
-For questions or support, please open an issue or reach out to the Octant team.

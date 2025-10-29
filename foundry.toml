@@ -5,6 +5,7 @@ libs = ['lib']
 solc = "0.8.25"
 
 remappings = [
+    "@openzeppelin/contracts/=lib/octant-v2-core/dependencies/@openzeppelin-contracts-5.3.0/contracts/",
     "@openzeppelin/=lib/openzeppelin-contracts/",
     "forge-std/=lib/forge-std/src/",
     "@tokenized-strategy/=lib/tokenized-strategy/src/",

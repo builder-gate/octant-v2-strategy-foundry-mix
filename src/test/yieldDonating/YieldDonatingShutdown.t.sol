@@ -16,8 +16,8 @@ contract YieldDonatingShutdownTest is Setup {
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
-        // Earn Interest
-        skip(1 days);
+        // Skip some time
+        skip(30 days);
 
         // Shutdown the strategy
         vm.prank(emergencyAdmin);
@@ -32,11 +32,7 @@ contract YieldDonatingShutdownTest is Setup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
     }
 
     function test_emergencyWithdraw_maxUint(uint256 _amount) public {
@@ -47,8 +43,8 @@ contract YieldDonatingShutdownTest is Setup {
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
-        // Earn Interest
-        skip(1 days);
+        // Skip some time
+        skip(30 days);
 
         // Shutdown the strategy
         vm.prank(emergencyAdmin);
@@ -67,11 +63,7 @@ contract YieldDonatingShutdownTest is Setup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
     }
 
     // TODO: Add tests for any emergency function added.
