@@ -3,7 +3,7 @@ pragma solidity ^0.8.25;
 
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
-import {ReputationSplitter} from "../src/ReputationSplitter.sol";
+import {ReputationSplitter} from "../src/builder_gate/ReputationSplitter.sol";
 
 /**
  * @title Deploy ReputationSplitter

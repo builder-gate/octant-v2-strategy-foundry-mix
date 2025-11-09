@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Test} from "forge-std/Test.sol";
-import {ReputationSplitter} from "../ReputationSplitter.sol";
+import {ReputationSplitter} from "../../builder_gate/ReputationSplitter.sol";
 
 contract ReputationSplitterTest is Test {
     ReputationSplitter public splitter;
