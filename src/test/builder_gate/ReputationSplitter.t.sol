@@ -3,9 +3,22 @@ pragma solidity ^0.8.25;
 
 import {Test} from "forge-std/Test.sol";
 import {ReputationSplitter} from "../../builder_gate/ReputationSplitter.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+// Mock ERC20 token for testing
+contract MockERC20 is ERC20 {
+    constructor(string memory name, string memory symbol) ERC20(name, symbol) {
+        _mint(msg.sender, 1000000 ether);
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
 
 contract ReputationSplitterTest is Test {
     ReputationSplitter public splitter;
+    MockERC20 public rewardToken;
 
     address public owner = address(this);
     address public alice = address(0x1);
@@ -17,15 +30,14 @@ contract ReputationSplitterTest is Test {
     event ScoresLoaded(uint256 indexed round, uint256 devsCount, uint256 totalScore);
     event RewardClaimed(address indexed dev, uint256 indexed round, uint256 amount);
     event PhaseChanged(ReputationSplitter.Phase newPhase, uint256 indexed round);
-    event RewardsDeposited(uint256 indexed round, uint256 amount);
     event NewRoundStarted(uint256 indexed round);
 
     function setUp() public {
-        // Deploy ReputationSplitter
-        splitter = new ReputationSplitter();
+        // Deploy mock ERC20 token
+        rewardToken = new MockERC20("Reward Token", "RWD");
 
-        // Fund test contract with ETH for sending to splitter
-        vm.deal(address(this), 1000 ether);
+        // Deploy ReputationSplitter with the mock token
+        splitter = new ReputationSplitter(address(rewardToken));
 
         // Label addresses for better traces
         vm.label(alice, "Alice");
@@ -34,10 +46,9 @@ contract ReputationSplitterTest is Test {
         vm.label(dave, "Dave");
     }
 
-    // Helper to send ETH to splitter
-    function _depositETH(uint256 amount) internal {
-        (bool success,) = address(splitter).call{value: amount}("");
-        require(success, "ETH transfer failed");
+    // Helper to transfer tokens to splitter contract
+    function _depositTokens(uint256 amount) internal {
+        rewardToken.transfer(address(splitter), amount);
     }
 
     // ============================================
@@ -117,18 +128,6 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
     }
 
-    function test_DepositETH() public {
-        uint256 depositAmount = 10 ether;
-
-        vm.expectEmit(true, false, false, true);
-        emit RewardsDeposited(1, depositAmount);
-
-        _depositETH(depositAmount);
-
-        assertEq(splitter.roundRewardPool(1), depositAmount);
-        assertEq(address(splitter).balance, depositAmount);
-    }
-
     function test_SetScores() public {
         // Registration
         vm.prank(alice);
@@ -141,7 +140,7 @@ contract ReputationSplitterTest is Test {
 
         // Deposit rewards
         uint256 rewardAmount = 10 ether;
-        _depositETH(rewardAmount);
+        _depositTokens(rewardAmount);
 
         // Set scores
         address[] memory devs = new address[](2);
@@ -185,6 +184,9 @@ contract ReputationSplitterTest is Test {
     function test_RevertSetScoresDevNotRegistered() public {
         splitter.startActivePhase();
 
+        // Deposit tokens first
+        _depositTokens(10 ether);
+
         address[] memory devs = new address[](1);
         devs[0] = alice; // Not registered
         uint256[] memory scores = new uint256[](1);
@@ -209,7 +211,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 rewardAmount = 10 ether;
-        _depositETH(rewardAmount);
+        _depositTokens(rewardAmount);
 
         address[] memory devs = new address[](2);
         devs[0] = alice;
@@ -229,7 +231,7 @@ contract ReputationSplitterTest is Test {
         vm.prank(alice);
         splitter.claim();
 
-        assertEq(alice.balance, aliceExpectedReward);
+        assertEq(rewardToken.balanceOf(alice), aliceExpectedReward);
         assertTrue(splitter.hasClaimedInRound(1, alice));
     }
 
@@ -243,7 +245,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 rewardAmount = 10 ether;
-        _depositETH(rewardAmount);
+        _depositTokens(rewardAmount);
 
         address[] memory devs = new address[](2);
         devs[0] = alice;
@@ -267,7 +269,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 rewardAmount = 10 ether;
-        _depositETH(rewardAmount);
+        _depositTokens(rewardAmount);
 
         address[] memory devs = new address[](1);
         devs[0] = alice;
@@ -301,7 +303,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 round1Reward = 10 ether;
-        _depositETH(round1Reward);
+        _depositTokens(round1Reward);
 
         address[] memory devs1 = new address[](2);
         devs1[0] = alice;
@@ -315,7 +317,7 @@ contract ReputationSplitterTest is Test {
         // Alice claims Round 1
         vm.prank(alice);
         splitter.claim();
-        assertEq(alice.balance, 5 ether);
+        assertEq(rewardToken.balanceOf(alice), 5 ether);
 
         // ===== ROUND 2 =====
         vm.expectEmit(true, false, false, true);
@@ -336,7 +338,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 round2Reward = 20 ether;
-        _depositETH(round2Reward);
+        _depositTokens(round2Reward);
 
         address[] memory devs2 = new address[](2);
         devs2[0] = bob;
@@ -351,8 +353,9 @@ contract ReputationSplitterTest is Test {
         vm.prank(bob);
         splitter.claim();
 
-        // Bob should have: Round 1 (5 ether) + Round 2 (14 ether) = 19 ether
-        assertEq(bob.balance, 19 ether);
+        // Bob should have: Round 1 (5 ether) + Round 2 (70% of 20 ether = 14 ether) = 19 ether
+        // Round 2 pool = 25 (total balance) - 5 (unclaimed from round 1) = 20 ether
+        assertEq(rewardToken.balanceOf(bob), 19 ether);
     }
 
     function test_ClaimMultipleRoundsAtOnce() public {
@@ -363,7 +366,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 round1Reward = 10 ether;
-        _depositETH(round1Reward);
+        _depositTokens(round1Reward);
 
         address[] memory devs1 = new address[](1);
         devs1[0] = alice;
@@ -381,7 +384,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 round2Reward = 20 ether;
-        _depositETH(round2Reward);
+        _depositTokens(round2Reward);
 
         address[] memory devs2 = new address[](1);
         devs2[0] = alice;
@@ -395,7 +398,7 @@ contract ReputationSplitterTest is Test {
         splitter.claim();
 
         // Alice should receive: Round 1 (10 ether) + Round 2 (20 ether) = 30 ether
-        assertEq(alice.balance, 30 ether);
+        assertEq(rewardToken.balanceOf(alice), 30 ether);
         assertTrue(splitter.hasClaimedInRound(1, alice));
         assertTrue(splitter.hasClaimedInRound(2, alice));
     }
@@ -407,7 +410,7 @@ contract ReputationSplitterTest is Test {
 
         splitter.startActivePhase();
 
-        _depositETH(10 ether);
+        _depositTokens(10 ether);
 
         address[] memory devs = new address[](1);
         devs[0] = alice;
@@ -423,7 +426,7 @@ contract ReputationSplitterTest is Test {
 
         splitter.startActivePhase();
 
-        _depositETH(20 ether);
+        _depositTokens(20 ether);
 
         splitter.setScores(devs, scores);
 
@@ -449,7 +452,7 @@ contract ReputationSplitterTest is Test {
 
         splitter.startActivePhase();
 
-        _depositETH(10 ether);
+        _depositTokens(10 ether);
 
         address[] memory devs = new address[](1);
         devs[0] = alice;
@@ -465,7 +468,7 @@ contract ReputationSplitterTest is Test {
 
         splitter.startActivePhase();
 
-        _depositETH(15 ether);
+        _depositTokens(15 ether);
 
         splitter.setScores(devs, scores);
 
@@ -483,7 +486,7 @@ contract ReputationSplitterTest is Test {
 
         splitter.startActivePhase();
 
-        _depositETH(10 ether);
+        _depositTokens(10 ether);
 
         address[] memory devs = new address[](1);
         devs[0] = alice;
@@ -508,7 +511,16 @@ contract ReputationSplitterTest is Test {
 
         splitter.startActivePhase();
 
-        _depositETH(10 ether);
+        _depositTokens(10 ether);
+
+        address[] memory devs = new address[](2);
+        devs[0] = alice;
+        devs[1] = bob;
+        uint256[] memory scores = new uint256[](2);
+        scores[0] = 60;
+        scores[1] = 40;
+
+        splitter.setScores(devs, scores);
 
         (
             uint256 round,
@@ -519,9 +531,9 @@ contract ReputationSplitterTest is Test {
         ) = splitter.getCurrentRoundInfo();
 
         assertEq(round, 1);
-        assertEq(uint256(phase), uint256(ReputationSplitter.Phase.Active));
+        assertEq(uint256(phase), uint256(ReputationSplitter.Phase.Distribution));
         assertEq(devsCount, 2);
-        assertEq(totalScoreValue, 0); // No scores set yet
+        assertEq(totalScoreValue, 100);
         assertEq(rewardPool, 10 ether);
     }
 
@@ -536,18 +548,13 @@ contract ReputationSplitterTest is Test {
 
     function test_EmergencyWithdraw() public {
         uint256 depositAmount = 10 ether;
-        _depositETH(depositAmount);
+        _depositTokens(depositAmount);
 
         address recipient = address(0x999);
         splitter.emergencyWithdraw(depositAmount, recipient);
 
-        assertEq(recipient.balance, depositAmount);
-        assertEq(address(splitter).balance, 0);
-    }
-
-    function test_RevertDepositZeroETH() public {
-        vm.expectRevert("ReputationSplitter: must send ETH");
-        _depositETH(0);
+        assertEq(rewardToken.balanceOf(recipient), depositAmount);
+        assertEq(rewardToken.balanceOf(address(splitter)), 0);
     }
 
     function test_ProportionalDistribution() public {
@@ -562,7 +569,7 @@ contract ReputationSplitterTest is Test {
         splitter.startActivePhase();
 
         uint256 rewardAmount = 1000 ether;
-        _depositETH(rewardAmount);
+        _depositTokens(rewardAmount);
 
         address[] memory devs = new address[](3);
         devs[0] = alice;
@@ -581,6 +588,176 @@ contract ReputationSplitterTest is Test {
         assertEq(splitter.calculateReward(charlie), 200 ether);
     }
 
-    // Allow contract to receive ETH
-    receive() external payable {}
+    function test_NewRoundAfterAllClaimed() public {
+        // Round 1: Everyone claims
+        vm.prank(alice);
+        splitter.register();
+        vm.prank(bob);
+        splitter.register();
+
+        splitter.startActivePhase();
+
+        _depositTokens(100 ether);
+
+        address[] memory devs1 = new address[](2);
+        devs1[0] = alice;
+        devs1[1] = bob;
+        uint256[] memory scores1 = new uint256[](2);
+        scores1[0] = 50;
+        scores1[1] = 50;
+
+        splitter.setScores(devs1, scores1);
+
+        // Both claim round 1
+        vm.prank(alice);
+        splitter.claim();
+        vm.prank(bob);
+        splitter.claim();
+
+        // Contract should be empty now
+        assertEq(rewardToken.balanceOf(address(splitter)), 0);
+
+        // Start Round 2
+        splitter.startNewRound();
+
+        vm.prank(alice);
+        splitter.register();
+        vm.prank(bob);
+        splitter.register();
+
+        splitter.startActivePhase();
+
+        // Deposit new tokens for round 2
+        _depositTokens(200 ether);
+
+        address[] memory devs2 = new address[](2);
+        devs2[0] = alice;
+        devs2[1] = bob;
+        uint256[] memory scores2 = new uint256[](2);
+        scores2[0] = 60;
+        scores2[1] = 40;
+
+        // This should work because all round 1 rewards were claimed
+        splitter.setScores(devs2, scores2);
+
+        // Verify round 2 pool is the full 200 ether
+        assertEq(splitter.roundRewardPool(2), 200 ether);
+
+        // Verify rewards are calculated correctly
+        assertEq(splitter.calculateReward(alice), 120 ether); // 60% of 200
+        assertEq(splitter.calculateReward(bob), 80 ether);    // 40% of 200
+    }
+
+    function test_ThreeCompleteRounds() public {
+        // ===== ROUND 1 =====
+        vm.prank(alice);
+        splitter.register();
+        vm.prank(bob);
+        splitter.register();
+
+        splitter.startActivePhase();
+        _depositTokens(100 ether);
+
+        address[] memory devs1 = new address[](2);
+        devs1[0] = alice;
+        devs1[1] = bob;
+        uint256[] memory scores1 = new uint256[](2);
+        scores1[0] = 50;
+        scores1[1] = 50;
+
+        splitter.setScores(devs1, scores1);
+
+        // Verify round 1 pool
+        assertEq(splitter.roundRewardPool(1), 100 ether);
+
+        // Alice claims immediately, Bob waits
+        vm.prank(alice);
+        splitter.claim();
+        assertEq(rewardToken.balanceOf(alice), 50 ether);
+
+        // ===== ROUND 2 =====
+        splitter.startNewRound();
+
+        vm.prank(alice);
+        splitter.register();
+        vm.prank(bob);
+        splitter.register();
+        vm.prank(charlie);
+        splitter.register();
+
+        splitter.startActivePhase();
+        _depositTokens(300 ether);
+
+        address[] memory devs2 = new address[](3);
+        devs2[0] = alice;
+        devs2[1] = bob;
+        devs2[2] = charlie;
+        uint256[] memory scores2 = new uint256[](3);
+        scores2[0] = 40;
+        scores2[1] = 40;
+        scores2[2] = 20;
+
+        splitter.setScores(devs2, scores2);
+
+        // Round 2 pool should be: 350 (total) - 50 (unclaimed round 1) = 300 ether
+        assertEq(splitter.roundRewardPool(2), 300 ether);
+
+        // Bob claims both rounds, Alice claims only round 2
+        vm.prank(bob);
+        splitter.claim();
+        // Bob: 50 (round 1) + 120 (40% of 300 in round 2) = 170 ether
+        assertEq(rewardToken.balanceOf(bob), 170 ether);
+
+        vm.prank(alice);
+        splitter.claim();
+        // Alice already had 50 from round 1, now gets 120 more (40% of 300)
+        assertEq(rewardToken.balanceOf(alice), 170 ether);
+
+        // Charlie waits to claim
+
+        // ===== ROUND 3 =====
+        splitter.startNewRound();
+
+        vm.prank(alice);
+        splitter.register();
+        vm.prank(dave);
+        splitter.register();
+
+        splitter.startActivePhase();
+        _depositTokens(400 ether);
+
+        address[] memory devs3 = new address[](2);
+        devs3[0] = alice;
+        devs3[1] = dave;
+        uint256[] memory scores3 = new uint256[](2);
+        scores3[0] = 70;
+        scores3[1] = 30;
+
+        splitter.setScores(devs3, scores3);
+
+        // Round 3 pool should be: 460 (total) - 60 (charlie's unclaimed round 2) = 400 ether
+        assertEq(splitter.roundRewardPool(3), 400 ether);
+
+        // Everyone claims
+        vm.prank(charlie);
+        splitter.claim();
+        // Charlie gets 20% of 300 from round 2 = 60 ether
+        assertEq(rewardToken.balanceOf(charlie), 60 ether);
+
+        vm.prank(alice);
+        splitter.claim();
+        // Alice already had 170, now gets 280 more (70% of 400)
+        assertEq(rewardToken.balanceOf(alice), 450 ether);
+
+        vm.prank(dave);
+        splitter.claim();
+        // Dave gets 30% of 400 = 120 ether
+        assertEq(rewardToken.balanceOf(dave), 120 ether);
+
+        // Verify all rewards were distributed correctly
+        // Total distributed: 50 (alice r1) + 170 (bob r1+r2) + 170 (alice r2) + 60 (charlie r2) + 280 (alice r3) + 120 (dave r3)
+        // = 50 + 50 + 120 + 120 + 60 + 280 + 120 = 800 ether
+        assertEq(rewardToken.balanceOf(alice) + rewardToken.balanceOf(bob) +
+                 rewardToken.balanceOf(charlie) + rewardToken.balanceOf(dave), 800 ether);
+    }
 }

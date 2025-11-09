@@ -7,7 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 // todo implement IYieldSource interface
 interface IYieldSource {
-    
+
     /**
      * @notice Supplies an `amount` of underlying asset into the reserve, receiving in return overlying aTokens.
      * - E.g. User supplies 100 USDC and gets in return 100 aUSDC
@@ -43,7 +43,36 @@ interface IYieldSource {
         address to
     ) external returns (uint256);
 
+    /**
+     * @notice Returns the reserve data for a given underlying asset
+     * @param asset The address of the underlying asset
+     */
+    function getReserveData(address asset) external view returns (
+        uint256 configuration,
+        uint128 liquidityIndex,
+        uint128 currentLiquidityRate,
+        uint128 variableBorrowIndex,
+        uint128 currentVariableBorrowRate,
+        uint128 currentStableBorrowRate,
+        uint40 lastUpdateTimestamp,
+        uint16 id,
+        address aTokenAddress,
+        address stableDebtTokenAddress,
+        address variableDebtTokenAddress,
+        address interestRateStrategyAddress,
+        uint128 accruedToTreasury,
+        uint128 unbacked,
+        uint128 isolationModeTotalDebt
+    );
+}
 
+interface IAToken {
+    /**
+     * @notice Returns the balance of the user in the underlying asset
+     * @param user The address of the user
+     * @return The balance of the user
+     */
+    function balanceOf(address user) external view returns (uint256);
 }
 
 /**
@@ -62,6 +91,9 @@ contract YieldDonatingStrategy is BaseStrategy {
 
     /// @notice Address of the yield source (e.g., Aave pool, Compound, Yearn vault)
     IYieldSource public immutable yieldSource;
+
+    /// @notice Address of the aToken (interest-bearing token from the yield source)
+    IAToken public immutable aToken;
 
     /**
      * @param _asset Address of the underlying asset
@@ -96,6 +128,21 @@ contract YieldDonatingStrategy is BaseStrategy {
         )
     {
         yieldSource = IYieldSource(_yieldSource);
+
+        // Try to get the aToken address from the yield source (for Aave-like protocols)
+        // This will fail silently if the yield source doesn't implement getReserveData
+        try IYieldSource(_yieldSource).getReserveData(_asset) returns (
+            uint256, uint128, uint128, uint128, uint128, uint128, uint40, uint16,
+            address aTokenAddress,
+            address, address, address, uint128, uint128, uint128
+        ) {
+            if (aTokenAddress != address(0)) {
+                aToken = IAToken(aTokenAddress);
+            }
+        } catch {
+            // If getReserveData fails, aToken will remain at address(0)
+            // This allows the strategy to work with non-Aave yield sources
+        }
 
         // max allow Yield source to withdraw assets
         ERC20(_asset).forceApprove(_yieldSource, type(uint256).max);
@@ -183,10 +230,29 @@ contract YieldDonatingStrategy is BaseStrategy {
      * amount of 'asset' the strategy currently holds including idle funds.
      */
     function _harvestAndReport() internal override returns (uint256 _totalAssets) {
-        // TODO: Implement harvesting logic
-        // 1. Amount of assets claimable from the yield source
-        // 2. Amount of assets idle in the strategy
-        // 3. Return the total (assets claimable + assets idle)
+        // Only deploy funds if not in shutdown mode
+        if (!TokenizedStrategy.isShutdown()) {
+            // Deploy any loose/idle funds to the yield source
+            uint256 looseAsset = asset.balanceOf(address(this));
+            if (looseAsset > 0) {
+                yieldSource.supply(address(asset), looseAsset, address(this), 0);
+            }
+        }
+
+        // Calculate total assets
+        uint256 deployedAssets;
+
+        if (address(aToken) != address(0)) {
+            // For Aave-like protocols: aToken balance represents underlying + accrued interest
+            deployedAssets = aToken.balanceOf(address(this));
+        } else {
+            // For other yield sources: this should be overridden by the strategist
+            // Default: assume no assets are deployed (all idle)
+            deployedAssets = 0;
+        }
+
+        // Total assets = deployed in yield source + idle in strategy
+        _totalAssets = deployedAssets + asset.balanceOf(address(this));
     }
 
     /*//////////////////////////////////////////////////////////////

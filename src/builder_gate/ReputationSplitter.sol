@@ -3,10 +3,11 @@ pragma solidity ^0.8.25;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title ReputationSplitter
- * @notice Simplified reward distribution system based on builder scores using native ETH
+ * @notice Simplified reward distribution system based on builder scores using ERC20 tokens
  * @dev Three-phase cycle: Registration → Active → Distribution
  */
 contract ReputationSplitter is ReentrancyGuard, Ownable {
@@ -18,6 +19,9 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
         Distribution    // Rewards are being distributed
     }
 
+    /// @notice Reward token used for distributions
+    IERC20 public immutable rewardToken;
+
     /// @notice Current phase of the contract
     Phase public currentPhase;
 
@@ -26,6 +30,9 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
 
     /// @notice Total reward pool per round
     mapping(uint256 => uint256) public roundRewardPool;
+
+    /// @notice Total rewards claimed from each round
+    mapping(uint256 => uint256) public roundClaimedRewards;
 
     /// @notice Array of registered developers per round
     mapping(uint256 => address[]) private _roundRegisteredDevs;
@@ -52,8 +59,11 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
 
     /**
      * @notice Constructor initializes the contract
+     * @param _rewardToken Address of the ERC20 token used for rewards
      */
-    constructor() Ownable(msg.sender) {
+    constructor(address _rewardToken) Ownable(msg.sender) {
+        require(_rewardToken != address(0), "ReputationSplitter: invalid token address");
+        rewardToken = IERC20(_rewardToken);
         currentPhase = Phase.Registration;
         currentRound = 1;
     }
@@ -102,6 +112,7 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
             if (roundReward > 0) {
                 hasClaimedInRound[roundId][msg.sender] = true;
                 totalReward += roundReward;
+                roundClaimedRewards[roundId] += roundReward;
                 claimedRounds++;
                 emit RewardClaimed(msg.sender, roundId, roundReward);
             }
@@ -109,9 +120,8 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
 
         require(totalReward > 0, "ReputationSplitter: no rewards to claim");
 
-        // Send ETH to claimer
-        (bool success, ) = msg.sender.call{value: totalReward}("");
-        require(success, "ReputationSplitter: ETH transfer failed");
+        // Transfer ERC20 tokens to claimer
+        require(rewardToken.transfer(msg.sender, totalReward), "ReputationSplitter: token transfer failed");
     }
 
     // ============================================
@@ -128,6 +138,17 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
         require(currentPhase == Phase.Active, "ReputationSplitter: not in active phase");
         require(devs.length == scores.length, "ReputationSplitter: length mismatch");
         require(devs.length > 0, "ReputationSplitter: empty arrays");
+
+        // Calculate unclaimed rewards from previous rounds (allocated but not yet claimed)
+        uint256 unclaimedRewards = 0;
+        for (uint256 i = 1; i < currentRound; i++) {
+            unclaimedRewards += (roundRewardPool[i] - roundClaimedRewards[i]);
+        }
+
+        // Set the reward pool for this round to current balance minus unclaimed rewards from previous rounds
+        uint256 currentBalance = rewardToken.balanceOf(address(this));
+        require(currentBalance > unclaimedRewards, "ReputationSplitter: insufficient balance for new round");
+        roundRewardPool[currentRound] = currentBalance - unclaimedRewards;
 
         for (uint256 i = 0; i < devs.length; i++) {
             address dev = devs[i];
@@ -150,30 +171,6 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
         // Automatically transition to Distribution phase
         currentPhase = Phase.Distribution;
         emit PhaseChanged(Phase.Distribution, currentRound);
-    }
-
-    // /**
-    //  * @notice Admin deposits reward tokens for the current round
-    //  * @param amount Amount of tokens to deposit
-    //  * @dev Tokens must be approved first. Can be called multiple times to add more rewards.
-    //  */
-    // function depositRewards(uint256 amount) external onlyOwner {
-    //     require(amount > 0, "ReputationSplitter: amount must be > 0");
-
-    //     roundRewardPool[currentRound] += amount;
-    //     rewardToken.transferFrom(msg.sender, address(this), amount);
-
-    //     emit RewardsDeposited(currentRound, amount);
-    // }
-
-    /**
-     * @notice Receive ETH deposits for the current round
-     * @dev Automatically adds received ETH to the current round's reward pool
-     */
-    receive() external payable {
-        require(msg.value > 0, "ReputationSplitter: must send ETH");
-        roundRewardPool[currentRound] += msg.value;
-        emit RewardsDeposited(currentRound, msg.value);
     }
 
     /**
@@ -205,15 +202,14 @@ contract ReputationSplitter is ReentrancyGuard, Ownable {
 
     /**
      * @notice Emergency withdraw function (only owner)
-     * @param amount Amount of ETH to withdraw
+     * @param amount Amount of tokens to withdraw
      * @param to Recipient address
      */
     function emergencyWithdraw(uint256 amount, address to) external onlyOwner {
         require(to != address(0), "ReputationSplitter: invalid recipient");
-        require(amount <= address(this).balance, "ReputationSplitter: insufficient balance");
+        require(amount <= rewardToken.balanceOf(address(this)), "ReputationSplitter: insufficient balance");
 
-        (bool success, ) = to.call{value: amount}("");
-        require(success, "ReputationSplitter: ETH transfer failed");
+        require(rewardToken.transfer(to, amount), "ReputationSplitter: token transfer failed");
     }
 
     // ============================================
